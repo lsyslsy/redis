@@ -1,4 +1,4 @@
-/* SDSLib 2.0 -- A C dynamic strings library
+ /* SDSLib 2.0 -- A C dynamic strings library
  *
  * Copyright (c) 2006-2015, Salvatore Sanfilippo <antirez at gmail dot com>
  * Copyright (c) 2015, Oran Agra
@@ -48,8 +48,12 @@ struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
 };
+
+// 下面的这些都是sds的基本结构，只不过为了更合理控制内存空间，其中的len和alloc字段长度，可以是1,2,4,8字节长度
 struct __attribute__ ((__packed__)) sdshdr8 {
+    // 字符串中字符数
     uint8_t len; /* used */
+	// 已经分配的空余字节数，排除头和终止0字节
     uint8_t alloc; /* excluding the header and null terminator */
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
@@ -80,6 +84,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_64 4
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
+// 获得sds结构的指针位置
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
@@ -101,6 +106,7 @@ static inline size_t sdslen(const sds s) {
     return 0;
 }
 
+// 当前剩余可用的字节数
 static inline size_t sdsavail(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {

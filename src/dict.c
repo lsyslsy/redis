@@ -59,6 +59,7 @@
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio. */
+ // bg save 的时候设置，让ratio阈值更低
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
 
@@ -148,10 +149,12 @@ int dictExpand(dict *d, unsigned long size)
 {
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hash table */
+    // 先校验，如果在rehash或者要变的长度小于已经使用的返回
     if (dictIsRehashing(d) || d->ht[0].used > size)
         return DICT_ERR;
 
     dictht n; /* the new hash table */
+	// 返回大于等于2的幂次长度
     unsigned long realsize = _dictNextPower(size);
 
     /* Rehashing to the same table size is not useful. */
@@ -169,7 +172,7 @@ int dictExpand(dict *d, unsigned long size)
         d->ht[0] = n;
         return DICT_OK;
     }
-
+	// 指示开始rehash
     /* Prepare a second hash table for incremental rehashing */
     d->ht[1] = n;
     d->rehashidx = 0;
@@ -186,6 +189,7 @@ int dictExpand(dict *d, unsigned long size)
  * will visit at max N*10 empty buckets in total, otherwise the amount of
  * work it does would be unbound and the function may block for a long time. */
 int dictRehash(dict *d, int n) {
+    // 最多做N*10步的访问空bucket，防止次数太多可能卡很久
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     if (!dictIsRehashing(d)) return 0;
 
@@ -207,6 +211,7 @@ int dictRehash(dict *d, int n) {
             nextde = de->next;
             /* Get the index in the new hash table */
             h = dictHashKey(d, de->key) & d->ht[1].sizemask;
+			// 插入到拉链的最左边
             de->next = d->ht[1].table[h];
             d->ht[1].table[h] = de;
             d->ht[0].used--;
@@ -294,14 +299,16 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
     long index;
     dictEntry *entry;
     dictht *ht;
-
+	// 尝试进行一步rehash
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     /* Get the index of the new element, or -1 if
      * the element already exists. */
+     // 获得对应key的bucket，如果负载太高，会进行rehash, rehash后用第二个table
     if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
         return NULL;
 
+	// 这么说是有道理的，放在最左边，因为新插入最可能马上访问
     /* Allocate the memory and store the new entry.
      * Insert the element in top, with the assumption that in a database
      * system it is more likely that recently added entries are accessed
@@ -367,10 +374,10 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
     int table;
 
     if (d->ht[0].used == 0 && d->ht[1].used == 0) return NULL;
-
+	// 可能改变长度的，都来一次rehash
     if (dictIsRehashing(d)) _dictRehashStep(d);
     h = dictHashKey(d, key);
-
+	// 如果在rehash，两哥hashtable都要找
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
         he = d->ht[table].table[idx];
@@ -425,6 +432,7 @@ int dictDelete(dict *ht, const void *key) {
  * // Do something with entry
  * dictFreeUnlinkedEntry(entry); // <- This does not need to lookup again.
  */
+ // 只从hashtable中删了，不free内存，等调用者自己释放
 dictEntry *dictUnlink(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,1);
 }
@@ -445,7 +453,7 @@ int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
     /* Free all the elements */
     for (i = 0; i < ht->size && ht->used > 0; i++) {
         dictEntry *he, *nextHe;
-
+		// 回调是返回进度用?
         if (callback && (i & 65535) == 0) callback(d->privdata);
 
         if ((he = ht->table[i]) == NULL) continue;
@@ -564,6 +572,7 @@ dictEntry *dictNext(dictIterator *iter)
     while (1) {
         if (iter->entry == NULL) {
             dictht *ht = &iter->d->ht[iter->table];
+			// 如果是刚开始迭代
             if (iter->index == -1 && iter->table == 0) {
                 if (iter->safe)
                     iter->d->iterators++;
@@ -571,6 +580,7 @@ dictEntry *dictNext(dictIterator *iter)
                     iter->fingerprint = dictFingerprint(iter->d);
             }
             iter->index++;
+			// 如果已经迭代完一个table了
             if (iter->index >= (long) ht->size) {
                 if (dictIsRehashing(iter->d) && iter->table == 0) {
                     iter->table++;
@@ -931,6 +941,7 @@ static int _dictExpandIfNeeded(dict *d)
      * table (global setting) or we should avoid it but the ratio between
      * elements/buckets is over the "safe" threshold, we resize doubling
      * the number of buckets. */
+     // 没bgsave负载下，1:1,否则超过1:5也要rehash
     if (d->ht[0].used >= d->ht[0].size &&
         (dict_can_resize ||
          d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
@@ -980,6 +991,7 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
             }
             he = he->next;
         }
+		// rehash 的话两个表都要查
         if (!dictIsRehashing(d)) break;
     }
     return idx;

@@ -167,6 +167,7 @@ void sdsfree(sds s) {
     s_free((char*)s-sdsHdrSize(s[-1]));
 }
 
+//如果手动用'\0'设置了空字符阶段，可以用这个来更新长度
 /* Set the sds string length to the length as obtained with strlen(), so
  * considering as content only up to the first null term character.
  *
@@ -210,15 +211,20 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
 
     /* Return ASAP if there is enough space left. */
     if (avail >= addlen) return s;
-
+	// 字节数当前
     len = sdslen(s);
+	// 头指针
     sh = (char*)s-sdsHdrSize(oldtype);
+	// 新sds的字节数
     newlen = (len+addlen);
+	// 涉及到内存分配策略，如果小于SDS_MAX_PERALLOC(1M)，则翻倍预留
+	// 否则预留SDS_MAX_PREALLOC
     if (newlen < SDS_MAX_PREALLOC)
         newlen *= 2;
     else
         newlen += SDS_MAX_PREALLOC;
 
+	// 新的长度对应的sds哪种长度类型
     type = sdsReqType(newlen);
 
     /* Don't use type 5: the user is appending to the string and type 5 is
@@ -227,11 +233,13 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     if (type == SDS_TYPE_5) type = SDS_TYPE_8;
 
     hdrlen = sdsHdrSize(type);
+	// 类型相同的情况下，直接realloc，重分配
     if (oldtype==type) {
         newsh = s_realloc(sh, hdrlen+newlen+1);
         if (newsh == NULL) return NULL;
         s = (char*)newsh+hdrlen;
     } else {
+        // 类型不同的话，malloc以后，copy之前的内容
         /* Since the header size changes, need to move the string forward,
          * and can't use realloc */
         newsh = s_malloc(hdrlen+newlen+1);
@@ -273,6 +281,7 @@ sds sdsRemoveFreeSpace(sds s) {
         if (newsh == NULL) return NULL;
         s = (char*)newsh+oldhdrlen;
     } else {
+        // 换种类型的话，拷贝过去，头重新设置
         newsh = s_malloc(hdrlen+len+1);
         if (newsh == NULL) return NULL;
         memcpy((char*)newsh+hdrlen, s, len+1);
@@ -326,6 +335,7 @@ void *sdsAllocPtr(sds s) {
  * ... check for nread <= 0 and handle it ...
  * sdsIncrLen(s, nread);
  */
+ // 通过sdsMakeRoomFor预留空间后，确保空间够的情况下，边读边设置len
 void sdsIncrLen(sds s, ssize_t incr) {
     unsigned char flags = s[-1];
     size_t len;
@@ -390,6 +400,7 @@ sds sdsgrowzero(sds s, size_t len) {
  *
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
+ // 把t指向的长度为len的字符串，连接到s上
 sds sdscatlen(sds s, const void *t, size_t len) {
     size_t curlen = sdslen(s);
 
@@ -507,6 +518,7 @@ int sdsull2str(char *s, unsigned long long v) {
  *
  * sdscatprintf(sdsempty(),"%lld\n", value);
  */
+ // 吧一个longlong类型的值转成其字符串表述
 sds sdsfromlonglong(long long value) {
     char buf[SDS_LLSTR_SIZE];
     int len = sdsll2str(buf,value);

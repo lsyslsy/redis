@@ -44,17 +44,21 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+// 字典项
 typedef struct dictEntry {
+    // 键
     void *key;
+	// 值，可以多种类型
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
     } v;
+    // 指向下个拉链的
     struct dictEntry *next;
 } dictEntry;
-
+// 特定字典类型的对应操作
 typedef struct dictType {
     uint64_t (*hashFunction)(const void *key);
     void *(*keyDup)(void *privdata, const void *key);
@@ -68,15 +72,20 @@ typedef struct dictType {
  * implement incremental rehashing, for the old to the new table. */
 typedef struct dictht {
     dictEntry **table;
+	// 有几个bucket
     unsigned long size;
+	// 用来和某个key计算出的hash进行mask，来计算出bucket索引
     unsigned long sizemask;
+	// 当前有几个dictEntry
     unsigned long used;
 } dictht;
 
 typedef struct dict {
     dictType *type;
     void *privdata;
+	// 两个hashtable，用于渐进hash
     dictht ht[2];
+	// rehash的索引
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     unsigned long iterators; /* number of iterators currently running */
 } dict;
