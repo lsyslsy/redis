@@ -805,7 +805,9 @@ typedef struct zskiplistNode {
 
 typedef struct zskiplist {
     struct zskiplistNode *header, *tail;
+	// 节点数量
     unsigned long length;
+	// 最大节点的层数
     int level;
 } zskiplist;
 
